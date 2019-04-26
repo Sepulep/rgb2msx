@@ -349,7 +349,7 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False, w
     data=data.reshape((height,width,3))
     data = numpy.transpose(data, (1,0,2))
         
-    rgb2msx=RGB2MSX(200)
+    rgb2msx=RGB2MSX(tolerance=dither_threshold,detail_weight=detail_weight)
     
     pdb.gimp_progress_init("Converting to MSX image",None)
     result,pat,col=rgb2msx.convert(data, progress_callback=pdb.gimp_progress_update)
@@ -369,9 +369,11 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False, w
     pdb.gimp_display_new(new_image)
 
     if writeVRAM:
+        if dirname is None:
+            dirname=""
         write_vram(pat,col, outputfile=os.path.join(dirname,filename))
 
-def gimp():
+def do_gimp():
     register(
       "python_fu_sample",
       "convert to MSX",
@@ -382,7 +384,7 @@ def gimp():
       "<Image>/Filters/MSX/RGB2MSX",
       "",      # Create a new image, don't work on an existing one
       [ 
-      (PF_INT, "dither_tolerance", "dither threshold (lower means less dither)", 100),
+      (PF_INT, "dither_tolerance", "dither threshold (0-100, lower means less dither)", 100),
       (PF_FLOAT, "detail_weight", "weight given to detail in adjustment for detail level (0-1)", 0),
       (PF_BOOL, "scale", "Scale image to 256x192?", True),
       (PF_BOOL, "writeVRAM", "Write MSX VRAM image?", True),
@@ -397,6 +399,6 @@ def gimp():
   
 if __name__=="__main__":
     if HAS_GIMP:
-      gimp()
+      do_gimp()
     else:
       standalone()
