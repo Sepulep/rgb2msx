@@ -273,16 +273,13 @@ class RGB2MSX(object):
         result=numpy.zeros((Nx,Ny), dtype=numpy.int8)  # result array with indexed pic
         patbuffer=numpy.zeros( (Nx//8) * Ny, dtype=numpy.uint8) # pattern array
         colbuffer=numpy.zeros( (Nx//8) * Ny, dtype=numpy.uint8) # color array
-
-        if progress_callback and callable(progress_callback): # fake progress
-            progress_callback(0.25)
         
-        blocks=pool.map( pool_wrap, [ data[:,i*n:(i+1)*n,:] for i in range(Ny//n) ])
+        requests=[ pool.apply_async( pool_wrap,  (data[:,i*n:(i+1)*n,:],)) for i in range(Ny//n) ]
 
-        if progress_callback and callable(progress_callback):
-            progress_callback(0.75)
-
-        for i, (r,p,c) in enumerate(blocks):
+        for i, request in enumerate(requests):
+            (r,p,c)=request.get()
+            if progress_callback and callable(progress_callback):
+                progress_callback(i/(1.*len(requests)))
             low=i*n
             high=(i+1)*n
             result[:,low:high]=r
@@ -383,9 +380,6 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False, w
     
     region=layer.get_pixel_rgn(xoffset, yoffset, width, height, False)
 
-    if writeVRAM and (width!=256 or height!=192):
-        pdb.gimp_message("written file probably invalid: the size of the image is not 256x192, rescale or enable scaling")
-
     data=numpy.frombuffer(region[:,:], dtype=numpy.uint8)
     data=data.reshape((height,width,3))
     data = numpy.transpose(data, (1,0,2))
@@ -413,6 +407,10 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False, w
         if dirname is None:
             dirname=""
         write_vram(pat,col, outputfile=os.path.join(dirname,filename))
+
+    if writeVRAM and (width!=256 or height!=192):
+        pdb.gimp_message("written file probably invalid: the size of the image is not 256x192, rescale or enable scaling")
+
 
 def do_gimp():
     register(
