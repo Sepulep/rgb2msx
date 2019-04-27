@@ -377,6 +377,10 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False, w
         if height>192:
             yoffset=(height-192)//2
             height=192
+
+    if writeVRAM and (width!=256 or height!=192):
+        pdb.gimp_message("will probably generate invalid file: the size of the image is not 256x192, rescale or enable scaling")
+
     
     region=layer.get_pixel_rgn(xoffset, yoffset, width, height, False)
 
@@ -408,9 +412,8 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False, w
             dirname=""
         write_vram(pat,col, outputfile=os.path.join(dirname,filename))
 
-    if writeVRAM and (width!=256 or height!=192):
-        pdb.gimp_message("written file probably invalid: the size of the image is not 256x192, rescale or enable scaling")
 
+    pdb.gimp_progress_update(1.0)
 
 def do_gimp():
     register(
