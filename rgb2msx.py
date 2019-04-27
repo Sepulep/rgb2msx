@@ -20,6 +20,8 @@ import sys
 import numpy
 import time
 
+from multiprocessing import Pool
+
 try:
   from gimpfu import *
   HAS_GIMP=True
@@ -144,11 +146,12 @@ def calcdist2000(r1, g1, b1, r2, g2, b2):
     return dist2000(l1,a1,b1,l2,a2,b2)
   
 class RGB2MSX(object):
-    def __init__(self,tolerance=100, palette=MSX_PALETTE, detail_weight=0): # possible: ~20% faster with multiple blocks per pass
+    def __init__(self,tolerance=100, palette=MSX_PALETTE, detail_weight=0, nproc=1): # possible: ~20% faster with multiple blocks per pass
 
         self.tolerance=numpy.clip(tolerance,0,100)*1.01  # *101 because differences can be slightly larger than 100..
         self.palette=palette
         self.detail_weight=numpy.clip(detail_weight,0.,1.)
+        self.nproc=nproc
         
         msxr = palette[0::3]
         msxg = palette[1::3]
@@ -199,7 +202,7 @@ class RGB2MSX(object):
         return detail
 
 
-    def convert(self,data, progress_callback=None):
+    def _convert(self,data, progress_callback=None):
   
         Nx=data.shape[0]
         Ny=data.shape[1]
@@ -210,8 +213,8 @@ class RGB2MSX(object):
         tl,ta,tb=rgb2cielab(self.tr,self.tg,self.tb)        
         
         result=numpy.zeros((Nx,Ny), dtype=numpy.int8)  # result array with indexed pic
-        patarray=numpy.zeros((Nx/8, Ny), dtype=numpy.int8) # pattern array
-        colarray=numpy.zeros((Nx/8, Ny), dtype=numpy.int8) # color array
+        patarray=numpy.zeros((Nx//8, Ny), dtype=numpy.int8) # pattern array
+        colarray=numpy.zeros((Nx//8, Ny), dtype=numpy.int8) # color array
         
         y=0
         
@@ -255,7 +258,42 @@ class RGB2MSX(object):
         patbuffer=numpy.uint8(patarray[ (flat//8)%(Nx//8) , 8*(flat//(Nx))+flat%8])
         colbuffer=numpy.uint8(colarray[ (flat//8)%(Nx//8) , 8*(flat//(Nx))+flat%8])
 
-        return result, patbuffer.tobytes(), colbuffer.tobytes()
+        return result, patbuffer, colbuffer
+
+    def convert(self,data, progress_callback=None):
+        if self.nproc<=1:
+            return self._convert(data, progress_callback)
+        Nx=data.shape[0]
+        Ny=data.shape[1]
+        pool=Pool(self.nproc)
+        
+        N=pool._processes
+        n=8
+        
+        result=numpy.zeros((Nx,Ny), dtype=numpy.int8)  # result array with indexed pic
+        patbuffer=numpy.zeros( (Nx//8) * Ny, dtype=numpy.uint8) # pattern array
+        colbuffer=numpy.zeros( (Nx//8) * Ny, dtype=numpy.uint8) # color array
+
+        if progress_callback and callable(progress_callback): # fake progress
+            progress_callback(0.25)
+        
+        blocks=pool.map( pool_wrap, [ data[:,i*n:(i+1)*n,:] for i in range(Ny//n) ])
+
+        if progress_callback and callable(progress_callback):
+            progress_callback(0.75)
+
+        for i, (r,p,c) in enumerate(blocks):
+            low=i*n
+            high=(i+1)*n
+            result[:,low:high]=r
+            patbuffer[ (Nx//8)*low : (Nx//8)*high]=p
+            colbuffer[ (Nx//8)*low : (Nx//8)*high]=c
+        
+        return result,patbuffer,colbuffer
+            
+def pool_wrap(data):        
+    global rgb2msx
+    return rgb2msx._convert(data)
 
 # test
 def write_vram(patbuffer,colbuffer, outputfile="test.sc2"):
@@ -271,12 +309,12 @@ def write_vram(patbuffer,colbuffer, outputfile="test.sc2"):
 
     f = open(outputfile,"wb")
     f.write(header)
-    f.write(patbuffer)
+    f.write(patbuffer.tobytes())
     f.write(nambuf)
     f.write(nambuf)
     f.write(nambuf)
     f.write(sprbuf)
-    f.write(colbuffer)
+    f.write(colbuffer.tobytes())
     f.close()
 
 import argparse
@@ -287,9 +325,11 @@ def optionparser():
     parser.add_argument('-o ', dest='output_file', type= str, help='output file name', default="msx.sc2")
     parser.add_argument('-d ', dest='dither_tolerance', type= int, help='dither tolerance value (0-100, smaller means less dithering)', default=100)
     parser.add_argument('-l ', dest='detail_weight', type= float, help='level of detail adjustment weight (0-1)', default=0)
+    parser.add_argument('-n', dest='nproc', type= int, help='numper of processes to use (default=1)', default=1)
     return parser
 
 def standalone():
+    global rgb2msx
     from PIL import Image
 
     parser=optionparser()
@@ -302,17 +342,18 @@ def standalone():
     data = numpy.array(im)
     data = numpy.transpose(data, (1,0,2))
     
-    rgb2msx=RGB2MSX(tolerance=args.dither_tolerance, detail_weight=args.detail_weight)
+    rgb2msx=RGB2MSX(tolerance=args.dither_tolerance, detail_weight=args.detail_weight, nproc=args.nproc)
     
     result,pat,col=rgb2msx.convert(data)
-  
+    
     write_vram(pat,col, outputfile=args.output_file)
   
     im=Image.fromarray(result.T, 'P')
     im.putpalette(rgb2msx.palette)
     im.show()
 
-def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False, writeVRAM=False, dirname="", filename=""):
+def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False, writeVRAM=False, dirname="", filename="", nproc=1):
+    global rgb2msx
 
   # in place if indexed and size match?
     xoffset=0
@@ -349,7 +390,7 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False, w
     data=data.reshape((height,width,3))
     data = numpy.transpose(data, (1,0,2))
         
-    rgb2msx=RGB2MSX(tolerance=dither_threshold,detail_weight=detail_weight)
+    rgb2msx=RGB2MSX(tolerance=dither_threshold,detail_weight=detail_weight, nproc=nproc)
     
     pdb.gimp_progress_init("Converting to MSX image",None)
     result,pat,col=rgb2msx.convert(data, progress_callback=pdb.gimp_progress_update)
@@ -390,6 +431,7 @@ def do_gimp():
       (PF_BOOL, "writeVRAM", "Write MSX VRAM image?", True),
       (PF_DIRNAME, "dirname", "Save directory:", ""),
       (PF_STRING, "filename", "MSX VRAM file name:", "msx.sc2"), 
+      (PF_INT, "nproc", "number of processors to use", 1),
       ],
       [],
       gimp2msx)
