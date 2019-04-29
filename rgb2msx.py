@@ -183,7 +183,9 @@ class RGB2MSX(object):
         self.tr=numpy.reshape(numpy.outer(toner,numpy.ones(8)),toner.shape+(8,))
         self.tg=numpy.reshape(numpy.outer(toneg,numpy.ones(8)),toner.shape+(8,))
         self.tb=numpy.reshape(numpy.outer(toneb,numpy.ones(8)),toner.shape+(8,))
-  
+
+        self.tl,self.ta,self.tb=rgb2cielab(self.tr,self.tg,self.tb)
+
         dither=numpy.ones((8,2),dtype="int32")
         dither[::2,0]=0
         dither[1::2,1]=0
@@ -202,15 +204,14 @@ class RGB2MSX(object):
         return detail
 
 
-    def _convert(self,data, progress_callback=None):
+    def _convert(self,data, detail=None, progress_callback=None):
   
         Nx=data.shape[0]
         Ny=data.shape[1]
         assert data.shape[2] == 3
         
-        detail=self.detail(data)
-        
-        tl,ta,tb=rgb2cielab(self.tr,self.tg,self.tb)        
+        if detail is None:
+            detail=self.detail(data)
         
         result=numpy.zeros((Nx,Ny), dtype=numpy.int8)  # result array with indexed pic
         patarray=numpy.zeros((Nx//8, Ny), dtype=numpy.int8) # pattern array
@@ -235,7 +236,7 @@ class RGB2MSX(object):
                 
                 octetl,octeta,octetb=rgb2cielab(octetr,octetg,octetb)
 
-                alldistances=dist2000(tl,ta,tb, octetl,octeta,octetb) * (1.+octetdetail*self.detail_weight)
+                alldistances=dist2000(self.tl,self.ta,self.tb, octetl,octeta,octetb) * (1.+octetdetail*self.detail_weight)
                 alldistances[self.no_dither_tones]=999.
                 best_color_for_each_tone=numpy.argmin(alldistances,axis=1)
                 best_distance=alldistances[p,best_color_for_each_tone,o]
@@ -262,9 +263,11 @@ class RGB2MSX(object):
 
     def convert(self,data, progress_callback=None):
         if self.nproc<=1:
-            return self._convert(data, progress_callback)
+            return self._convert(data, progress_callback=progress_callback)
         Nx=data.shape[0]
         Ny=data.shape[1]
+        detail=self.detail(data)
+
         pool=Pool(self.nproc)
         
         N=pool._processes
@@ -274,7 +277,7 @@ class RGB2MSX(object):
         patbuffer=numpy.zeros( (Nx//8) * Ny, dtype=numpy.uint8) # pattern array
         colbuffer=numpy.zeros( (Nx//8) * Ny, dtype=numpy.uint8) # color array
         
-        requests=[ pool.apply_async( pool_wrap,  (data[:,i*n:(i+1)*n,:],)) for i in range(Ny//n) ]
+        requests=[ pool.apply_async( pool_wrap,  (data[:,i*n:(i+1)*n,:], detail[:,i*n:(i+1)*n])) for i in range(Ny//n) ]
 
         for i, request in enumerate(requests):
             (r,p,c)=request.get()
@@ -288,9 +291,9 @@ class RGB2MSX(object):
         
         return result,patbuffer,colbuffer
             
-def pool_wrap(data):        
+def pool_wrap(data, detail):        
     global rgb2msx
-    return rgb2msx._convert(data)
+    return rgb2msx._convert(data, detail)
 
 # test
 def write_vram(patbuffer,colbuffer, outputfile="test.sc2"):
