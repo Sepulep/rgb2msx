@@ -20,6 +20,11 @@ for example:
 Copy the rgb2msx.py file to the plugin directory 
 (e.g. ~/.config/GIMP/2.10/plug-ins)
 
+The GIMP plugin also allows scaling of the image and correct for the MSX
+pixel aspect ratio. A seperate plugin tool is also available to do 
+only the scaling (this also allows placement of the layer before color
+conversion).
+
 ### file format ###
 
 The scripts writes a file with a dump of the MSX screen 2 VRAM, directly loadable 
