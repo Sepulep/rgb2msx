@@ -251,8 +251,10 @@ class RGB2MSX(object):
   
         Nx=data.shape[0]
         Ny=data.shape[1]
-        assert data.shape[2] == 3
+        assert data.shape[2] in [3,4]
         
+        has_alpha=data.shape[2]==4
+                
         if detail is None:
             detail=self.detail(data)
         
@@ -270,12 +272,20 @@ class RGB2MSX(object):
 
             x=0
             
-            # parallelize?
             while x<Nx:
                 octetr=data[x:x+8,y,0]
                 octetg=data[x:x+8,y,1]
                 octetb=data[x:x+8,y,2]
                 octetdetail=detail[x:x+8,y]
+                
+                if has_alpha:
+                    octetalpha=data[x:x+8,y,3]>128
+                    octetr=octetr*octetalpha
+                    octetg=octetg*octetalpha
+                    octetb=octetb*octetalpha
+                    alpha_octet=any(octetalpha==0) # if any transparancy in octet, black will be replaced by zero
+                else:
+                    alpha_octet=False
                 
                 octetl,octeta,octetb=rgb2cielab(octetr,octetg,octetb)
 
@@ -290,9 +300,14 @@ class RGB2MSX(object):
                 dithered= best==2
                 best[dithered]=self.dither[dithered,y%2]
                 
-                result[x:x+8,y]=self.combinations[best_tone][best]
+                best_combination=self.combinations[best_tone].copy()
+                
+                if alpha_octet:
+                    best_combination[best_combination==1]=0
+                
+                result[x:x+8,y]=best_combination[best]
                 patarray[x//8,y]=numpy.packbits(numpy.uint8(best))
-                colarray[x//8,y]=self.combinations[best_tone][0]+16*self.combinations[best_tone][1]
+                colarray[x//8,y]=best_combination[0]+16*best_combination[1]
         
                 x+=8
             y+=1
@@ -402,7 +417,7 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False,
     if image is None:
         return
 
-    layer=image.flatten()
+    layer=pdb.gimp_layer_new_from_visible(image, image, "work")
 
   # in place if indexed and size match?
     xoffset=0
@@ -435,6 +450,7 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False,
                     height=192
 
 
+
         else:
             if layer.width>4/3.*pixel_aspect*layer.height:
                 width=256 if scale else layer.width 
@@ -457,20 +473,19 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False,
                     height=192
 
             _image.resize(width,height,x,y)
-            layer=_image.flatten()
 
-              
+        layer=_image.flatten()              
 
     if writeVRAM and (width!=256 or height!=192):
         pdb.gimp_message("will probably generate invalid file: the size of the resulting image is not 256x192, rescale input or enable scaling")
 
     width=8*(width//8)
     height=8*(height//8)
-    
+        
     region=layer.get_pixel_rgn(xoffset, yoffset, width, height, False)
 
     data=numpy.frombuffer(region[:,:], dtype=numpy.uint8)
-    data=data.reshape((height,width,3))
+    data=data.reshape((height,width,4 if layer.has_alpha else 3))
     data = numpy.transpose(data, (1,0,2))
         
     rgb2msx=RGB2MSX(tolerance=dither_threshold,detail_weight=detail_weight, nproc=nproc)
@@ -503,7 +518,7 @@ def gimpscale2msx(image, layer, scale=False, fit_largest=False, pixel_aspect=1.)
     if image is None:
         return
 
-    layer=image.flatten()
+    layer=pdb.gimp_layer_new_from_visible(image, image, "work")
 
     xoffset=0
     yoffset=0
@@ -556,7 +571,6 @@ def gimpscale2msx(image, layer, scale=False, fit_largest=False, pixel_aspect=1.)
                 height=192
 
         _image.resize(width,height,x,y)
-        #~ layer=_image.flatten()
 
     width=8*(width//8)
     height=8*(height//8)
