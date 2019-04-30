@@ -29,7 +29,8 @@ except ImportError:
   HAS_GIMP=False
 
 # Leandro's palette
-MSX_PALETTE = [ 0,0,0,0,0,0,36,219,36,109,255,109,36,36,255,73,109,255,182,36,36,73,219,
+# note zero is not used in conversion; its put to 255,0,255 here to aide GIMP conversion to alpha
+MSX_PALETTE = [ 255,0,255,0,0,0,36,219,36,109,255,109,36,36,255,73,109,255,182,36,36,73,219,
                   255,255,36,36,255,109,109,219,219,36,219,219,146,36,146,36,219,73,182,182,
                   182,182,255,255,255]
 
@@ -504,7 +505,14 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False,
     region=layer.get_pixel_rgn(0,0,width,height, True)
   
     region[:,:]=numpy.uint8(result.T).tobytes()
+
+    layer.add_alpha()
+    
     new_image.add_layer(layer, 0)
+
+    pdb.gimp_image_select_color(new_image, 2, layer, (255,0,255))
+    pdb.gimp_drawable_edit_clear(layer)
+    pdb.gimp_selection_none(new_image)
   
     pdb.gimp_display_new(new_image)
 
