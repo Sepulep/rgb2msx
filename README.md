@@ -23,7 +23,8 @@ Copy the rgb2msx.py file to the plugin directory
 The GIMP plugin also allows scaling of the image and correct for the MSX
 pixel aspect ratio. A seperate plugin tool is also available to do 
 only the scaling (this also allows placement of the layer before color
-conversion).
+conversion). The conversion supports transparancy with an alpha threshold 
+of 128. 
 
 ### file format ###
 
