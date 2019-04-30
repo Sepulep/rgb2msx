@@ -28,10 +28,53 @@ try:
 except ImportError:
   HAS_GIMP=False
 
+# Leandro's palette
 MSX_PALETTE = [ 0,0,0,0,0,0,36,219,36,109,255,109,36,36,255,73,109,255,182,36,36,73,219,
                   255,255,36,36,255,109,109,219,219,36,219,219,146,36,146,36,219,73,182,182,
                   182,182,255,255,255]
 
+# Rogerup palette (https://www.msx.org/forum/msx-talk/development/rgb-to-msx-colors)
+# similar to https://paulwratt.github.io/programmers-palettes/HW-MSX/HW-MSX-palettes.html
+# and wikipedia
+MSX_PALETTE_1= [
+       0,   0,   0,      #  0  0 - #000000 - TRANSPARENT
+       0,   0,   0,      #  1  1 - #000000 - BLACK
+       63, 184,  74,     #  2  2 - #3FB84A - GREEN   MEDIUM
+      117, 207, 126,     #  3  3 - #75CF7E - GREEN   LIGHT
+       89,  85, 223,     #  4  4 - #5955DF - BLUE    DARK
+      128, 119, 240,     #  5  5 - #8077F0 - BLUE    LIGHT
+      184,  94,  81,     #  6  6 - #B85E51 - RED     DARK
+      102, 219, 239,     #  7  7 - #66DBEF - CYAN
+      218, 102,  90,     #  8  8 - #DA665A - RED     MEDIUM
+      254, 138, 126,     #  9  9 - #FE8A7E - RED     LIGHT
+      204, 195,  95,     # 10  A - #CCC35F - YELLOW  DARK
+      222, 208, 136,     # 11  B - #DED088 - YELLOW  LIGHT
+       59, 161,  65,     # 12  C - #3BA141 - GREEN   DARK
+      182, 103, 181,     # 13  D - #B667B5 - MAGENTA
+      204, 204, 204,     # 14  E - #CCCCCC - GRAY
+      255, 255, 255,     # 15  F - #FFFFFF - WHITE
+    ]
+    
+# see also:
+# https://github.com/openMSX/openMSX/issues/1024
+# http://damad.be/joost/openmsx/attach/p/openmsx/bugs/_discuss/thread/890f77af/fb98/attachment/TMS9928_family_Palette.xls
+MSX_PALETTE_2=[ 0,0,0,
+0, 4, 0,
+58, 187, 67,
+112, 211, 119,
+84, 89, 215,
+123, 123, 232,
+179, 99, 75,
+97, 223, 231,
+212, 106, 83,
+248, 142, 119,
+199, 199, 89,
+217, 212, 129,
+54, 165, 59,
+176, 107, 174,
+199, 208, 197,
+250, 255, 248,
+]
 
 '''
 ---------------------------------------------------------------------------- 
@@ -352,8 +395,14 @@ def standalone():
     im.putpalette(rgb2msx.palette)
     im.show()
 
-def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False, writeVRAM=False, dirname="", filename="", nproc=1):
+def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False,  
+              fit_largest=False, pixel_aspect=1., writeVRAM=False, dirname="", filename="", nproc=1):
     global rgb2msx
+
+    if image is None:
+        return
+
+    layer=image.flatten()
 
   # in place if indexed and size match?
     xoffset=0
@@ -362,28 +411,61 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False, w
     width=layer.width
     height=layer.height
         
-    if scale and (width!=256 or height!=192) or image.base_type!=RGB:    
+    if scale and (width!=256 or height!=192) or image.base_type!=RGB or pixel_aspect>1.:    
         _image=gimp.Image(layer.width, layer.height, RGB)
         layer=pdb.gimp_layer_new_from_drawable(layer, _image)
         _image.add_layer(layer,0)
-  
-        if layer.width>4/3.*layer.height:
-            height=192
-            width=(192*layer.width)//layer.height
+
+        if not fit_largest:
+            if layer.width>4/3.*pixel_aspect*layer.height:
+                height=192 if scale else layer.height
+                width=int( (height*layer.width)/(layer.height*pixel_aspect))
+            else:
+                width=256 if scale else layer.width 
+                height=int( (width*pixel_aspect*layer.height)/layer.width)
+
+            _image.scale(width,height)
+
+            if scale:
+                if width>256:
+                    xoffset=(width-256)//2
+                    width=256
+                if height>192:
+                    yoffset=(height-192)//2
+                    height=192
+
+
         else:
-            width=256
-            height=(256*layer.height)//layer.width
-        _image.scale(width,height)      
-        if width>256:
-            xoffset=(width-256)//2
-            width=256
-        if height>192:
-            yoffset=(height-192)//2
-            height=192
+            if layer.width>4/3.*pixel_aspect*layer.height:
+                width=256 if scale else layer.width 
+                height=int( (width*pixel_aspect*layer.height)/layer.width)
+            else:
+                height=192 if scale else layer.height
+                width=int( (height*layer.width)/(layer.height*pixel_aspect))
+            
+            _image.scale(width,height)
+            
+            x=0
+            y=0
+
+            if scale:
+                if width<256:
+                    x=(256-width)//2
+                    width=256
+                if height<192:
+                    y=(192-height)//2
+                    height=192
+
+            _image.resize(width,height,x,y)
+            layer=_image.flatten()
+
+              
 
     if writeVRAM and (width!=256 or height!=192):
-        pdb.gimp_message("will probably generate invalid file: the size of the image is not 256x192, rescale or enable scaling")
+        pdb.gimp_message("will probably generate invalid file: the size of the resulting image is not 256x192, rescale input or enable scaling")
 
+    width=8*(width//8)
+    height=8*(height//8)
     
     region=layer.get_pixel_rgn(xoffset, yoffset, width, height, False)
 
@@ -415,14 +497,96 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False, w
             dirname=""
         write_vram(pat,col, outputfile=os.path.join(dirname,filename))
 
-
     pdb.gimp_progress_update(1.0)
+
+def gimpscale2msx(image, layer, scale=False, fit_largest=False, pixel_aspect=1.):
+    if image is None:
+        return
+
+    layer=image.flatten()
+
+    xoffset=0
+    yoffset=0
+  
+    width=layer.width
+    height=layer.height
+        
+    _image=gimp.Image(layer.width, layer.height, RGB)
+    layer=pdb.gimp_layer_new_from_drawable(layer, _image)
+    _image.add_layer(layer,0)
+
+    if not fit_largest:
+        if layer.width>4/3.*pixel_aspect*layer.height:
+            height=192 if scale else layer.height
+            width=int( (height*layer.width)/(layer.height*pixel_aspect))
+        else:
+            width=256 if scale else layer.width 
+            height=int( (width*pixel_aspect*layer.height)/layer.width)
+
+        _image.scale(width,height)
+
+        if scale:
+            if width>256:
+                xoffset=(width-256)//2
+                width=256
+            if height>192:
+                yoffset=(height-192)//2
+                height=192
+
+
+    else:
+        if layer.width>4/3.*pixel_aspect*layer.height:
+            width=256 if scale else layer.width 
+            height=int( (width*pixel_aspect*layer.height)/layer.width)
+        else:
+            height=192 if scale else layer.height
+            width=int( (height*layer.width)/(layer.height*pixel_aspect))
+        
+        _image.scale(width,height)
+        
+        x=0
+        y=0
+
+        if scale:
+            if width<256:
+                x=(256-width)//2
+                width=256
+            if height<192:
+                y=(192-height)//2
+                height=192
+
+        _image.resize(width,height,x,y)
+        #~ layer=_image.flatten()
+
+    width=8*(width//8)
+    height=8*(height//8)
+
+    _image.resize(width,height,-xoffset, -yoffset)
+
+    pdb.gimp_display_new(_image)
 
 def do_gimp():
     register(
-      "python_fu_sample",
-      "convert to MSX",
-      "Convert image to MSX 16 color image",
+      "scale_to_msx",
+      "scale image to MSX size",
+      "scale image to MSX screen 2 resolution (256x192)",
+      "FIP",
+      "FIP",
+      "april 2019",
+      "<Image>/Filters/MSX/SCALE2MSX",
+      "",      # Create a new image, don't work on an existing one
+      [ 
+      (PF_BOOL, "scale", "Scale image to 256x192?", True),
+      (PF_BOOL, "fit_largest", "fit largest dimension (otherwise fit smallest & crop)", False),
+      (PF_SLIDER, "pixel_aspect", "MSX pixel aspect ratio (for 50Hz: 1.377, 60Hz: 1.138) ", 1., (1,1.5,0.001)),
+      ],
+      [],
+      gimpscale2msx)
+
+    register(
+      "rgb_to_msx",
+      "convert to MSX screen 2",
+      "Convert image to MSX 16 color image using Leandro Correia's algorithm",
       "FIP",
       "FIP",
       "april 2019",
@@ -432,7 +596,9 @@ def do_gimp():
       (PF_INT, "dither_tolerance", "dither threshold (0-100, lower means less dither)", 100),
       (PF_FLOAT, "detail_weight", "weight given to detail in adjustment for detail level (0-1)", 0),
       (PF_BOOL, "scale", "Scale image to 256x192?", True),
-      (PF_BOOL, "writeVRAM", "Write MSX VRAM image?", True),
+      (PF_BOOL, "fit_largest", "fit largest dimension (otherwise fit smallest & crop)", False),
+      (PF_SLIDER, "pixel_aspect", "MSX pixel aspect ratio (for 50Hz: 1.377, 60Hz: 1.138) ", 1., (1,1.5,0.001)),
+      (PF_BOOL, "writeVRAM", "Write MSX VRAM image?", False),
       (PF_DIRNAME, "dirname", "Save directory:", ""),
       (PF_STRING, "filename", "MSX VRAM file name:", "msx.sc2"), 
       (PF_INT, "nproc", "number of processors to use", 1),
@@ -440,6 +606,7 @@ def do_gimp():
       [],
       gimp2msx)
     
+
     main()
   
   
