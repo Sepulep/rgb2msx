@@ -474,7 +474,8 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False,
 
             _image.resize(width,height,x,y)
 
-        layer=_image.flatten()              
+        layer=pdb.gimp_layer_new_from_visible(_image, _image, "work1")
+        #~ layer=_image.flatten()              
 
     if writeVRAM and (width!=256 or height!=192):
         pdb.gimp_message("will probably generate invalid file: the size of the resulting image is not 256x192, rescale input or enable scaling")
