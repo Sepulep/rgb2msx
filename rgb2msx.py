@@ -629,8 +629,8 @@ def gimpscale2msx(image, layer, scale=False, fit_largest=False, pixel_aspect=1.)
     pdb.gimp_display_new(_image)
     return _image
 
-def gimploadmsx(filename):
-    
+def gimploadmsx_(filename, raw_filename):
+        
     palette=MSX_PALETTE
     
     result,patbuffer, colbuffer=load_vram(filename)
@@ -657,25 +657,53 @@ def gimploadmsx(filename):
         pdb.gimp_drawable_edit_clear(layer)
     pdb.gimp_selection_none(new_image)
   
+    return new_image
+
+def gimploadmsx(filename):
+    new_image=gimploadmsx_(filename, None)
     pdb.gimp_display_new(new_image)
     return new_image
 
+def register_load_handlers():
+    gimp.register_load_handler('file-msx-load', 'sc2', '')
+    pdb['gimp-register-file-handler-mime']('file-msx-load', 'image/msx2')
+
+
 def do_gimp():
     register(
-      "import_msx",
+      "file-msx-load",
+      "Import MSX screen 2 dumps",
+      "Import MSX screen 2 dumps, detects and accepts various formats",
+      "FIP",
+      "FIP",
+      "april 2019",
+      "MSX screen 2",
+      None,      # Create a new image, don't work on an existing one
+      [ 
+      #~ (PF_INT32, "index", "index?", 0),
+      (PF_STRING, "filename", "input file", "msx.sc2"),
+      (PF_STRING, "raw_filename", "input file", "msx.sc2"),
+      ],
+      [(PF_IMAGE, "image", "msx sc2 loaded image")],
+      gimploadmsx_,
+      on_query=register_load_handlers,
+      menu="<Load>")  
+  
+    register(
+      "import-msx",
       "Import MSX screen 2 dumps",
       "Import MSX screen 2 dumps, detects and accepts various formats",
       "FIP",
       "FIP",
       "april 2019",
       "<Toolbox>/Filters/MSX/LOADMSX",
-      #~ "<Load>/MSX sc2 file/sc2/",
       None,      # Create a new image, don't work on an existing one
       [ 
       (PF_FILENAME, "filename", "input file", "msx.sc2"),
       ],
       [(PF_IMAGE, "image", "msx sc2 loaded image")],
-      gimploadmsx)
+      gimploadmsx,
+      )
 
     register(
       "scale_to_msx",
@@ -716,9 +744,7 @@ def do_gimp():
       ],
       [(PF_IMAGE, "image", "msx sc2 image")],
       gimp2msx)
-  
-    #~ gimp.register_load_handler("python-fu-import_msx", "sc2","")
-  
+
     main()
   
   

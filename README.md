@@ -29,7 +29,8 @@ SCALE2MSX is also available to do only the scaling and correction (this
 allows e.g. placement of the layer before color conversion).
 
 Finally the LOADMSX plugin imports MSX screen 2 VRAM files (.sc2) like
-the ones written by the plugin.   
+the ones written by the plugin. This also works as a file load handler
+(so you just open .sc2 files).
 
 ### file format ###
 
