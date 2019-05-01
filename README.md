@@ -17,19 +17,24 @@ for example:
 
 ### GIMP plugin ###
 
-Copy the rgb2msx.py file to the plugin directory 
-(e.g. ~/.config/GIMP/2.10/plug-ins)
+Copy the rgb2msx.py file to the plugin directory (e.g. 
+~/.config/GIMP/2.10/plug-ins)
 
-The GIMP plugin also allows scaling of the image and correct for the MSX
-pixel aspect ratio. A seperate plugin tool is also available to do 
-only the scaling (this also allows placement of the layer before color
-conversion). The conversion supports transparancy with an alpha threshold 
-of 128. 
+Three GIMP plugin tools will be available in a new Filter->MSX menu. 
+RGB2MSX converts an image to MSX screen 2 16 color (and optionally 
+writes a VRAM dump. The conversion supports transparancy (converting 
+pixels with alpha<128 to MSX color 0). RGB2MSX allows scaling of the 
+image and correcting for the MSX pixel aspect ratio. A seperate plugin 
+SCALE2MSX is also available to do only the scaling and correction (this 
+allows e.g. placement of the layer before color conversion).
+
+Finally the LOADMSX plugin imports MSX screen 2 VRAM files (.sc2) like
+the ones written by the plugin.   
 
 ### file format ###
 
-The scripts writes a file with a dump of the MSX screen 2 VRAM, directly loadable 
-with the following MSX Basic program:
+The script writes a file with a dump of the MSX screen 2 VRAM, directly 
+loadable with the following MSX Basic program:
 ```
 10 screen 2
 20 BLOAD "msx.sc2", S
