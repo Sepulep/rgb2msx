@@ -361,9 +361,7 @@ def write_vram(patbuffer,colbuffer, outputfile="test.sc2"):
     if len(patbuffer)!=6144 or len(colbuffer)!=6144:
       print("warning: not a valid buffer size")
 
-    nambuf = bytearray()
-    for i in range(256):
-        nambuf.append(i)
+    nambuf = numpy.arange(256, dtype=numpy.uint8).tobytes()
     sprbuf = bytearray(1280)
 
     f = open(outputfile,"wb")
@@ -375,6 +373,46 @@ def write_vram(patbuffer,colbuffer, outputfile="test.sc2"):
     f.write(sprbuf)
     f.write(colbuffer.tobytes())
     f.close()
+
+def load_vram(inputfile):
+    f = open(inputfile,"rb")
+    allfile=f.read()
+    f.close()
+    if len(allfile)==14343:  # VRAM dump
+        patbuffer=numpy.frombuffer(allfile[7:7+6144], dtype=numpy.uint8).copy()
+        nambuf=numpy.frombuffer(allfile[7+6144:7+6144+3*256], dtype=numpy.uint8).copy()
+        colbuffer=numpy.frombuffer(allfile[7+6144+256*3+1280:7+6144+256*3+1280+6144], dtype=numpy.uint8).copy()
+        
+        # first bring into standard order
+        nambuf=numpy.array(nambuf, dtype="int32")
+        for i in range(3):
+            indices=numpy.arange(2048)
+            offsets=i*2048+8*nambuf[256*i+indices//8] + (indices % 8)
+            patbuffer[2048*i:2048*(i+1)]=patbuffer[offsets]
+            colbuffer[2048*i:2048*(i+1)]=colbuffer[offsets]
+
+        # unshuffle 
+        patarray=numpy.zeros((32,192), dtype=numpy.uint8)
+        colarray=numpy.zeros((32,192), dtype=numpy.uint8)
+        flat=numpy.arange(6144)
+        patarray[ (flat//8)%(256//8) , 8*(flat//(256))+flat%8] = patbuffer[flat]
+        colarray[ (flat//8)%(256//8) , 8*(flat//(256))+flat%8] = colbuffer[flat]
+
+        # reconstruct index array
+        pat=numpy.unpackbits(patarray, axis=0).reshape(256,192)
+        x,y=numpy.indices((256,192))
+        col1=colarray & 15 
+        col2=(colarray & 240)>>4
+        col1=col1[x//8,y]
+        col2=col2[x//8,y]
+        result=col2*(pat)+col1*(1-pat)
+                
+        result=result.reshape(256,192)
+    else:
+        result=None
+        patbuffer=None
+        colbuffer=None
+    return result, patbuffer, colbuffer
 
 import argparse
 
@@ -511,7 +549,8 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False,
     new_image.add_layer(layer, 0)
 
     pdb.gimp_image_select_color(new_image, 2, layer, (255,0,255))
-    pdb.gimp_drawable_edit_clear(layer)
+    if not pdb.gimp_selection_is_empty(new_image):
+        pdb.gimp_drawable_edit_clear(layer)
     pdb.gimp_selection_none(new_image)
   
     pdb.gimp_display_new(new_image)
@@ -588,7 +627,50 @@ def gimpscale2msx(image, layer, scale=False, fit_largest=False, pixel_aspect=1.)
 
     pdb.gimp_display_new(_image)
 
+def gimploadmsx(image, layer, filename="", palette=MSX_PALETTE):
+    result,patbuffer, colbuffer=load_vram(filename)
+
+    width=256
+    height=192
+
+    new_image = gimp.Image(width, height, INDEXED)
+    
+    pdb.gimp_image_set_colormap(new_image, len(palette), palette)  
+    
+    layer = gimp.Layer(new_image, "MSX 16 color", width, height, INDEXED_IMAGE,
+                             100, NORMAL_MODE)
+    region=layer.get_pixel_rgn(0,0,width,height, True)
+  
+    region[:,:]=numpy.uint8(result.T).tobytes()
+
+    layer.add_alpha()
+    
+    new_image.add_layer(layer, 0)
+
+    pdb.gimp_image_select_color(new_image, 2, layer, (255,0,255))
+    if not pdb.gimp_selection_is_empty(new_image):
+        pdb.gimp_drawable_edit_clear(layer)
+    pdb.gimp_selection_none(new_image)
+  
+    pdb.gimp_display_new(new_image)
+
+
 def do_gimp():
+    register(
+      "import_msx",
+      "Import MSX screen 2 dumps",
+      "Import MSX screen 2 dumps, detects and accepts various formats",
+      "FIP",
+      "FIP",
+      "april 2019",
+      "<Image>/Filters/MSX/LOADMSX",
+      "",      # Create a new image, don't work on an existing one
+      [ 
+      (PF_FILENAME, "filename", "input file", "msx.sc2"),
+      ],
+      [],
+      gimploadmsx)
+
     register(
       "scale_to_msx",
       "scale image to MSX size",
