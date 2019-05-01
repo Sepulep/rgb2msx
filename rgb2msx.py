@@ -381,7 +381,7 @@ def load_vram(inputfile):
     if len(allfile)==14343:  # VRAM dump
         header = chr(0xFE)+chr(0)*2+chr(0xFF)+chr(0x37)+chr(0)*2
         if header!=allfile[:7]:
-            raise Exception("(registry) header config unsupported") 
+            raise Exception("header unsupported?") 
 
         patbuffer=numpy.frombuffer(allfile[7:7+6144], dtype=numpy.uint8).copy()
         nambuf=numpy.frombuffer(allfile[7+6144:7+6144+3*256], dtype=numpy.uint8).copy()
