@@ -561,6 +561,7 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False,
         write_vram(pat,col, outputfile=os.path.join(dirname,filename))
 
     pdb.gimp_progress_update(1.0)
+    return new_image
 
 def gimpscale2msx(image, layer, scale=False, fit_largest=False, pixel_aspect=1.):
     if image is None:
@@ -626,8 +627,12 @@ def gimpscale2msx(image, layer, scale=False, fit_largest=False, pixel_aspect=1.)
     _image.resize(width,height,-xoffset, -yoffset)
 
     pdb.gimp_display_new(_image)
+    return _image
 
-def gimploadmsx(image, layer, filename="", palette=MSX_PALETTE):
+def gimploadmsx(filename):
+    
+    palette=MSX_PALETTE
+    
     result,patbuffer, colbuffer=load_vram(filename)
 
     width=256
@@ -653,7 +658,7 @@ def gimploadmsx(image, layer, filename="", palette=MSX_PALETTE):
     pdb.gimp_selection_none(new_image)
   
     pdb.gimp_display_new(new_image)
-
+    return new_image
 
 def do_gimp():
     register(
@@ -663,12 +668,13 @@ def do_gimp():
       "FIP",
       "FIP",
       "april 2019",
-      "<Image>/Filters/MSX/LOADMSX",
-      "",      # Create a new image, don't work on an existing one
+      "<Toolbox>/Filters/MSX/LOADMSX",
+      #~ "<Load>/MSX sc2 file/sc2/",
+      None,      # Create a new image, don't work on an existing one
       [ 
       (PF_FILENAME, "filename", "input file", "msx.sc2"),
       ],
-      [],
+      [(PF_IMAGE, "image", "msx sc2 loaded image")],
       gimploadmsx)
 
     register(
@@ -679,13 +685,13 @@ def do_gimp():
       "FIP",
       "april 2019",
       "<Image>/Filters/MSX/SCALE2MSX",
-      "",      # Create a new image, don't work on an existing one
+      "*",
       [ 
       (PF_BOOL, "scale", "Scale image to 256x192?", True),
       (PF_BOOL, "fit_largest", "fit largest dimension (otherwise fit smallest & crop)", False),
       (PF_SLIDER, "pixel_aspect", "MSX pixel aspect ratio (for 50Hz: 1.377, 60Hz: 1.138) ", 1., (1,1.5,0.001)),
       ],
-      [],
+      [(PF_IMAGE, "image", "scaled image")],
       gimpscale2msx)
 
     register(
@@ -696,7 +702,7 @@ def do_gimp():
       "FIP",
       "april 2019",
       "<Image>/Filters/MSX/RGB2MSX",
-      "",      # Create a new image, don't work on an existing one
+      "*",
       [ 
       (PF_INT, "dither_tolerance", "dither threshold (0-100, lower means less dither)", 100),
       (PF_FLOAT, "detail_weight", "weight given to detail in adjustment for detail level (0-1)", 0),
@@ -708,10 +714,11 @@ def do_gimp():
       (PF_STRING, "filename", "MSX VRAM file name:", "msx.sc2"), 
       (PF_INT, "nproc", "number of processors to use", 1),
       ],
-      [],
+      [(PF_IMAGE, "image", "msx sc2 image")],
       gimp2msx)
-    
-
+  
+    #~ gimp.register_load_handler("python-fu-import_msx", "sc2","")
+  
     main()
   
   
