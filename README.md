@@ -21,7 +21,7 @@ Copy the rgb2msx.py file to the plugin directory (e.g.
 ~/.config/GIMP/2.10/plug-ins)
 
 Three GIMP plugin tools will be available in a new Filter->MSX menu. 
-RGB2MSX converts an image to MSX screen 2 16 color (and optionally 
+RGB2MSX converts an image to MSX screen 2 16 color, and optionally 
 writes a VRAM dump. The conversion supports transparancy (converting 
 pixels with alpha<128 to MSX color 0). RGB2MSX allows scaling of the 
 image and correcting for the MSX pixel aspect ratio. A seperate plugin 
