@@ -236,7 +236,7 @@ class RGB2MSX(object):
         self.dither=dither
 
     def detail(self, data):
-        lum=numpy.sum(data,axis=2)/3
+        lum=numpy.sum(data,axis=2)/3.
 
         detail=numpy.zeros_like(lum)
         
@@ -356,7 +356,7 @@ def pool_wrap(data, detail):
 
 # test
 def write_vram(patbuffer,colbuffer, outputfile="test.sc2"):
-    header = chr(0xFE)+chr(0)*2+chr(0xFF)+chr(0x37)+chr(0)*2
+    header = bytearray([0xFE]+[0]*2+[0xFF]+[0x37]+[0]*2)
 
     if len(patbuffer)!=6144 or len(colbuffer)!=6144:
       print("warning: not a valid buffer size")
