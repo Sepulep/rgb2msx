@@ -259,11 +259,23 @@ class RGB2MSX(object):
         lum=numpy.sum(data,axis=2)/3.
 
         detail=numpy.zeros_like(lum)
+        dx=numpy.zeros_like(lum)
+        dy=numpy.zeros_like(lum)
         
-        detail[1:-1,1:-1]=numpy.maximum( numpy.abs(lum[:-2,1:-1]-lum[1:-1,1:-1]),numpy.abs(lum[1:-1,1:-1]-lum[2:,1:-1])) + \
-                          numpy.maximum( numpy.abs(lum[1:-1,:-2]-lum[1:-1,1:-1]),numpy.abs(lum[1:-1,1:-1]-lum[1:-1,2:]))
-
-        detail=detail/2.
+        dx[:-1,:]+=numpy.abs(lum[1:,:]-lum[:-1,:]) #rightside
+        dx[1:,:]+=numpy.abs(lum[1:,:]-lum[:-1,:]) # leftside
+        dy[:,:-1]+=numpy.abs(lum[:,1:]-lum[:,:-1])
+        dy[:,1:]+=numpy.abs(lum[:,1:]-lum[:,:-1])
+        
+        dx[1:-1,1:-1]/=2
+        dy[1:-1,1:-1]/=2
+        
+        detail=(dx**2+dy**2)**0.5
+        
+        #~ from PIL import Image
+        #~ im=Image.fromarray(detail.T)
+        #~ print(detail.min(),detail.max())
+        #~ im.show()
 
         return detail
 
@@ -286,7 +298,6 @@ class RGB2MSX(object):
         y=0
         x8=numpy.arange(8)
 
-        
         p,o=numpy.indices((self.tr.shape[0], self.tr.shape[2]))
         
         while y<Ny:
@@ -312,7 +323,7 @@ class RGB2MSX(object):
                 
                 octetl,octeta,octetb=rgb2cielab(octetr,octetg,octetb)
 
-                alldistances=dist2000(self.tl,self.ta,self.tb, octetl,octeta,octetb) * (1.+octetdetail*self.detail_weight)
+                alldistances=dist2000(self.tl,self.ta,self.tb, octetl,octeta,octetb) / (1.+octetdetail*self.detail_weight)
                 alldistances[self.no_dither_tones]=99999.
                 best_color_for_each_tone=numpy.argmin(alldistances,axis=1)
                 best_distance=alldistances[p,best_color_for_each_tone,o]
