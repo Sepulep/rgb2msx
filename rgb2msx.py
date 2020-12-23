@@ -189,13 +189,27 @@ def calcdist2000(r1, g1, b1, r2, g2, b2):
 
     return dist2000(l1,a1,b1,l2,a2,b2)
   
+def bayerm(n):
+  if n==0:
+    return 0
+  else:
+    bm=4*bayerm(n-1)
+    return numpy.block([[bm+0,bm+2],[bm+3,bm+1]])
+
 class RGB2MSX(object):
-    def __init__(self,tolerance=100, palette=MSX_PALETTE, detail_weight=0, nproc=1): # possible: ~20% faster with multiple blocks per pass
+    def __init__(self,tolerance=100, palette=MSX_PALETTE, detail_weight=0, nproc=1, ndither=7): # possible: ~20% faster with multiple blocks per pass
 
         self.tolerance=numpy.clip(tolerance,0,100)*1.01  # *101 because differences can be slightly larger than 100..
         self.palette=palette
         self.detail_weight=numpy.clip(detail_weight,0.,1.)
         self.nproc=nproc
+        
+        ndither=numpy.clip(ndither,0,15)
+        
+        self.ndither=ndither
+        self.nbayer=int(numpy.log2(ndither))+1 if ndither>0 else 1
+        
+        assert ndither>=0
         
         msxr = palette[0::3]
         msxg = palette[1::3]
@@ -206,15 +220,17 @@ class RGB2MSX(object):
         toneb=[]        
         tone_weight=[]
         combinations=[]
+        
+        self.ditherfractions=numpy.array([i/(self.ndither+1.) for i in range(self.ndither+2)])
                 
         for cor1 in range(1,16):
           for cor2 in range(cor1,16):
               combinations.append([cor1,cor2])
-              toner.append([msxr[cor1], msxr[cor2], (msxr[cor1]+msxr[cor2])/2])
-              toneg.append([msxg[cor1], msxg[cor2], (msxg[cor1]+msxg[cor2])/2])
-              toneb.append([msxb[cor1], msxb[cor2], (msxb[cor1]+msxb[cor2])/2])
+              toner.append([((1-f)*msxr[cor1]+f*msxr[cor2]) for f in self.ditherfractions])
+              toneg.append([((1-f)*msxg[cor1]+f*msxg[cor2]) for f in self.ditherfractions])
+              toneb.append([((1-f)*msxb[cor1]+f*msxb[cor2]) for f in self.ditherfractions])
               cd=calcdist2000(msxr[cor1],msxg[cor1],msxb[cor1],msxr[cor2],msxg[cor2],msxb[cor2])
-              tone_weight.append([0,0,cd])
+              tone_weight.append([cd if f not in [0.,1.] else 0. for f in self.ditherfractions])
         
         toner=numpy.array(toner)
         toneg=numpy.array(toneg)
@@ -230,10 +246,14 @@ class RGB2MSX(object):
 
         self.tl,self.ta,self.tb=rgb2cielab(self.tr,self.tg,self.tb)
 
-        dither=numpy.ones((8,2),dtype="int32")
-        dither[::2,0]=0
-        dither[1::2,1]=0
-        self.dither=dither
+        self.Nbayer=2**self.nbayer
+        self._bayermap=bayerm(self.nbayer)/(1.*self.Nbayer**2)
+
+    @property
+    def bayermap(self):
+        #~ return numpy.random.random((self.Nbayer,self.Nbayer))
+        
+        return self._bayermap
 
     def detail(self, data):
         lum=numpy.sum(data,axis=2)/3.
@@ -248,7 +268,7 @@ class RGB2MSX(object):
         return detail
 
 
-    def _convert(self,data, detail=None, progress_callback=None):
+    def _convert(self,data, detail=None, progress_callback=None, yoffset=0):
   
         Nx=data.shape[0]
         Ny=data.shape[1]
@@ -264,6 +284,8 @@ class RGB2MSX(object):
         colarray=numpy.zeros((Nx//8, Ny), dtype=numpy.int8) # color array
         
         y=0
+        x8=numpy.arange(8)
+
         
         p,o=numpy.indices((self.tr.shape[0], self.tr.shape[2]))
         
@@ -291,16 +313,19 @@ class RGB2MSX(object):
                 octetl,octeta,octetb=rgb2cielab(octetr,octetg,octetb)
 
                 alldistances=dist2000(self.tl,self.ta,self.tb, octetl,octeta,octetb) * (1.+octetdetail*self.detail_weight)
-                alldistances[self.no_dither_tones]=999.
+                alldistances[self.no_dither_tones]=99999.
                 best_color_for_each_tone=numpy.argmin(alldistances,axis=1)
                 best_distance=alldistances[p,best_color_for_each_tone,o]
                 best_distance=numpy.sum(best_distance,axis=1) #
                 best_tone=numpy.argmin(best_distance)
         
-                best=best_color_for_each_tone[best_tone,:]        
-                dithered= best==2
-                best[dithered]=self.dither[dithered,y%2]
+                best=best_color_for_each_tone[best_tone,:]  
                 
+                _y=y+yoffset
+                _x=x8+x
+                
+                best=1*(self.bayermap[_x%self.Nbayer, _y%self.Nbayer]<self.ditherfractions[best])
+
                 best_combination=self.combinations[best_tone].copy()
                 
                 if alpha_octet:
@@ -336,7 +361,7 @@ class RGB2MSX(object):
         patbuffer=numpy.zeros( (Nx//8) * Ny, dtype=numpy.uint8) # pattern array
         colbuffer=numpy.zeros( (Nx//8) * Ny, dtype=numpy.uint8) # color array
         
-        requests=[ pool.apply_async( pool_wrap,  (data[:,i*n:(i+1)*n,:], detail[:,i*n:(i+1)*n])) for i in range(Ny//n) ]
+        requests=[ pool.apply_async( pool_wrap,  (data[:,i*n:(i+1)*n,:], detail[:,i*n:(i+1)*n], i*n)) for i in range(Ny//n) ]
 
         for i, request in enumerate(requests):
             (r,p,c)=request.get()
@@ -350,9 +375,9 @@ class RGB2MSX(object):
         
         return result,patbuffer,colbuffer
             
-def pool_wrap(data, detail):        
+def pool_wrap(data, detail, yoffset):        
     global rgb2msx
-    return rgb2msx._convert(data, detail)
+    return rgb2msx._convert(data, detail, yoffset=yoffset)
 
 # test
 def write_vram(patbuffer,colbuffer, outputfile="test.sc2"):
@@ -421,10 +446,11 @@ import argparse
 def optionparser():
     parser = argparse.ArgumentParser(description='convert image to MSX 16 color')
     parser.add_argument('input_file', type= str, help='input file name')
-    parser.add_argument('-o ', dest='output_file', type= str, help='output file name', default="msx.sc2")
-    parser.add_argument('-d ', dest='dither_tolerance', type= int, help='dither tolerance value (0-100, smaller means less dithering)', default=100)
-    parser.add_argument('-l ', dest='detail_weight', type= float, help='level of detail adjustment weight (0-1)', default=0)
-    parser.add_argument('-n', dest='nproc', type= int, help='numper of processes to use (default=1)', default=1)
+    parser.add_argument('-o', dest='output_file', type= str, help='output file name', default="msx.sc2")
+    parser.add_argument('-d', dest='dither_tolerance', type= int, help='dither tolerance value (0-100, smaller means less dithering)', default=100)
+    parser.add_argument('-l', dest='detail_weight', type= float, help='level of detail adjustment weight (0-1)', default=0)
+    parser.add_argument('-n', dest='nproc', type= int, help='number of processes to use (default=1)', default=1)
+    parser.add_argument('-r', dest='ndither', type= int, help='number of dither halftones (0-15, default=3)', default=3)
     return parser
 
 def standalone():
@@ -441,7 +467,7 @@ def standalone():
     data = numpy.array(im)
     data = numpy.transpose(data, (1,0,2))
     
-    rgb2msx=RGB2MSX(tolerance=args.dither_tolerance, detail_weight=args.detail_weight, nproc=args.nproc)
+    rgb2msx=RGB2MSX(tolerance=args.dither_tolerance, detail_weight=args.detail_weight, nproc=args.nproc, ndither=args.ndither)
     
     result,pat,col=rgb2msx.convert(data)
     
@@ -451,7 +477,7 @@ def standalone():
     im.putpalette(rgb2msx.palette)
     im.show()
 
-def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False,  
+def gimp2msx(image, layer, dither_threshold=100, ndither=3, detail_weight=0, scale=False,  
               fit_largest=False, pixel_aspect=1., writeVRAM=False, dirname="", filename="", nproc=1):
     global rgb2msx
 
@@ -530,7 +556,7 @@ def gimp2msx(image, layer, dither_threshold=100, detail_weight=0, scale=False,
     data=data.reshape((height,width,4 if layer.has_alpha else 3))
     data = numpy.transpose(data, (1,0,2))
         
-    rgb2msx=RGB2MSX(tolerance=dither_threshold,detail_weight=detail_weight, nproc=nproc)
+    rgb2msx=RGB2MSX(tolerance=dither_threshold,detail_weight=detail_weight, nproc=nproc, ndither=ndither)
     
     pdb.gimp_progress_init("Converting to MSX image",None)
     result,pat,col=rgb2msx.convert(data, progress_callback=pdb.gimp_progress_update)
@@ -739,6 +765,7 @@ def do_gimp():
       "*",
       [ 
       (PF_INT, "dither_tolerance", "dither threshold (0-100, lower means less dither)", 100),
+      (PF_INT, "ndither", "number of dither halftones to use (0-15)", 3),
       (PF_FLOAT, "detail_weight", "weight given to detail in adjustment for detail level (0-1)", 0),
       (PF_BOOL, "scale", "Scale image to 256x192?", True),
       (PF_BOOL, "fit_largest", "fit largest dimension (otherwise fit smallest & crop)", False),
