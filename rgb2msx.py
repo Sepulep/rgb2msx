@@ -224,7 +224,7 @@ class RGB2MSX(object):
         self.ditherfractions=numpy.array([i/(self.ndither+1.) for i in range(self.ndither+2)])
                 
         for cor1 in range(1,16):
-          for cor2 in range(cor1,16):
+          for cor2 in range(cor1+1,16):
               combinations.append([cor1,cor2])
               toner.append([((1-f)*msxr[cor1]+f*msxr[cor2]) for f in self.ditherfractions])
               toneg.append([((1-f)*msxg[cor1]+f*msxg[cor2]) for f in self.ditherfractions])
@@ -299,7 +299,7 @@ class RGB2MSX(object):
         x8=numpy.arange(8)
 
         p,o=numpy.indices((self.tr.shape[0], self.tr.shape[2]))
-        
+                
         while y<Ny:
             if progress_callback and callable(progress_callback):
               progress_callback(y/(1.*Ny))
@@ -324,12 +324,16 @@ class RGB2MSX(object):
                 octetl,octeta,octetb=rgb2cielab(octetr,octetg,octetb)
 
                 alldistances=dist2000(self.tl,self.ta,self.tb, octetl,octeta,octetb) / (1.+octetdetail*self.detail_weight)
-                alldistances[self.no_dither_tones]=99999.
+                alldistances[self.no_dither_tones]=99999. #alldistances[self.no_dither_tones]*3
                 best_color_for_each_tone=numpy.argmin(alldistances,axis=1)
+                #~ print(best_color_for_each_tone.shape) # 120,8
                 best_distance=alldistances[p,best_color_for_each_tone,o]
+                #~ print(best_distance.shape) # (120,8
                 best_distance=numpy.sum(best_distance,axis=1) #
+                #~ print(best_distance.shape) # (120)
                 best_tone=numpy.argmin(best_distance)
-        
+                #~ print(best_tone) # bv 81 (best combo)
+                
                 best=best_color_for_each_tone[best_tone,:]  
                 
                 _y=y+yoffset
