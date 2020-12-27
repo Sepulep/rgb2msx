@@ -92,7 +92,7 @@ This function first converts RGBs to XYZ and then to Lab.
 '''
 
 def msx_palette(palette=MSX_PALETTE_2):
-  p=palette.copy()
+  p=palette[:]
   p[0]=255
   p[2]=255
   return p
@@ -210,7 +210,7 @@ class RGB2MSX(object):
         self.detail_weight=numpy.clip(detail_weight,0.,1.)
         self.nproc=nproc
         
-        ndither=numpy.clip(ndither,0,15)
+        ndither=numpy.clip(ndither,0,31)
         
         self.ndither=ndither
         self.nbayer=int(numpy.log2(ndither))+1 if ndither>0 else 1
@@ -471,7 +471,7 @@ def optionparser():
     parser.add_argument('-d', dest='dither_tolerance', type= int, help='dither tolerance value (0-100, smaller means less dithering)', default=100)
     parser.add_argument('-l', dest='detail_weight', type= float, help='level of detail adjustment weight (0-1)', default=0)
     parser.add_argument('-n', dest='nproc', type= int, help='number of processes to use (default=1)', default=1)
-    parser.add_argument('-r', dest='ndither', type= int, help='number of dither halftones (0-15, default=3)', default=3)
+    parser.add_argument('-r', dest='ndither', type= int, help='number of dither halftones (0-31, default=3)', default=3)
     parser.add_argument('-p', dest='palette', type= str, help='version of MSX palette [leandro, rogerup, openmsx]', default="leandro")
 
     return parser
@@ -799,7 +799,7 @@ def do_gimp():
       "*",
       [ 
       (PF_INT, "dither_tolerance", "dither threshold (0-100, lower means less dither)", 100),
-      (PF_INT, "ndither", "number of dither halftones to use (0-15)", 3),
+      (PF_INT, "ndither", "number of dither halftones to use (0-31)", 3),
       (PF_FLOAT, "detail_weight", "weight given to detail in adjustment for detail level (0-1)", 0),
       (PF_BOOL, "scale", "Scale image to 256x192?", True),
       (PF_BOOL, "fit_largest", "fit largest dimension (otherwise fit smallest & crop)", False),
