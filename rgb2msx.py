@@ -91,7 +91,7 @@ This function first converts RGBs to XYZ and then to Lab.
 
 '''
 
-def msx_palette(palette=MSX_PALETTE):
+def msx_palette(palette=MSX_PALETTE_2):
   p=palette.copy()
   p[0]=255
   p[2]=255
@@ -472,6 +472,8 @@ def optionparser():
     parser.add_argument('-l', dest='detail_weight', type= float, help='level of detail adjustment weight (0-1)', default=0)
     parser.add_argument('-n', dest='nproc', type= int, help='number of processes to use (default=1)', default=1)
     parser.add_argument('-r', dest='ndither', type= int, help='number of dither halftones (0-15, default=3)', default=3)
+    parser.add_argument('-p', dest='palette', type= str, help='version of MSX palette [leandro, rogerup, openmsx]', default="leandro")
+
     return parser
 
 def standalone():
@@ -487,8 +489,19 @@ def standalone():
     im.show()
     data = numpy.array(im)
     data = numpy.transpose(data, (1,0,2))
+
+    if args.palette=='leandro':
+      palette=MSX_PALETTE
+    elif args.palette=='rogerup':
+      palette=MSX_PALETTE_1    
+    elif args.palette=='openmsx':
+      palette=MSX_PALETTE_2
+    else:
+      raise Exception("unknown palette")
+
     
-    rgb2msx=RGB2MSX(tolerance=args.dither_tolerance, detail_weight=args.detail_weight, nproc=args.nproc, ndither=args.ndither)
+    rgb2msx=RGB2MSX(tolerance=args.dither_tolerance, detail_weight=args.detail_weight, nproc=args.nproc, 
+      ndither=args.ndither, palette=palette)
     
     result,pat,col=rgb2msx.convert(data)
     
