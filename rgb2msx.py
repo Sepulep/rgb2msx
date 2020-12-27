@@ -30,7 +30,7 @@ except ImportError:
 
 # Leandro's palette
 # note zero is not used in conversion; its put to 255,0,255 here to aide GIMP conversion to alpha
-MSX_PALETTE = [ 255,0,255,0,0,0,36,219,36,109,255,109,36,36,255,73,109,255,182,36,36,73,219,
+MSX_PALETTE = [ 0,0,0,0,0,0,36,219,36,109,255,109,36,36,255,73,109,255,182,36,36,73,219,
                   255,255,36,36,255,109,109,219,219,36,219,219,146,36,146,36,219,73,182,182,
                   182,182,255,255,255]
 
@@ -90,6 +90,12 @@ the distance between them.
 This function first converts RGBs to XYZ and then to Lab.
 
 '''
+
+def msx_palette(palette=MSX_PALETTE):
+  p=palette.copy()
+  p[0]=255
+  p[2]=255
+  return p
 
 def rgb2cielab(r,g,b):
     r = r/255.0
@@ -197,7 +203,7 @@ def bayerm(n):
     return numpy.block([[bm+0,bm+2],[bm+3,bm+1]])
 
 class RGB2MSX(object):
-    def __init__(self,tolerance=100, palette=MSX_PALETTE, detail_weight=0, nproc=1, ndither=7): # possible: ~20% faster with multiple blocks per pass
+    def __init__(self,tolerance=100, palette=msx_palette(), detail_weight=0, nproc=1, ndither=7): # possible: ~20% faster with multiple blocks per pass
 
         self.tolerance=numpy.clip(tolerance,0,100)*1.01  # *101 because differences can be slightly larger than 100..
         self.palette=palette
@@ -239,7 +245,7 @@ class RGB2MSX(object):
         tone_weight=numpy.array(tone_weight)
         self.no_dither_tones=tone_weight>self.tolerance
         self.combinations=numpy.array(combinations)
-    
+        
         self.tr=numpy.reshape(numpy.outer(toner,numpy.ones(8)),toner.shape+(8,))
         self.tg=numpy.reshape(numpy.outer(toneg,numpy.ones(8)),toner.shape+(8,))
         self.tb=numpy.reshape(numpy.outer(toneb,numpy.ones(8)),toner.shape+(8,))
@@ -674,7 +680,7 @@ def gimpscale2msx(image, layer, scale=False, fit_largest=False, pixel_aspect=1.)
 
 def gimploadmsx_(filename, raw_filename):
         
-    palette=MSX_PALETTE
+    palette=msx_palette()
     
     try:
       result,patbuffer, colbuffer=load_vram(filename)
